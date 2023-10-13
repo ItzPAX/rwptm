@@ -122,4 +122,20 @@ namespace rwptm
 
 		return newAddress;
 	}
+
+	template <typename T>
+	T read_virtual_memory(uintptr_t address)
+	{
+		T out;
+		uintptr_t fixed_addr = correct_virtual_address(address);
+		memcpy(&out, (void*)fixed_addr, sizeof(T));
+		return out;
+	}
+
+	template <typename T>
+	void write_virtual_memory(uintptr_t address, T val)
+	{
+		uintptr_t fixed_addr = correct_virtual_address(address);
+		memcpy((void*)fixed_addr, (void*)&val, sizeof(T));
+	}
 }

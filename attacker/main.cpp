@@ -8,10 +8,10 @@ int main()
 	uintptr_t attacker_base = rwptm::attach("attacker.exe");
 	rwptm::setup_pml4_table();
 
-	uintptr_t corrected_va = rwptm::correct_virtual_address(0x1d683ff820);
+	std::cout << rwptm::read_virtual_memory<int>(0x5322ff7b0) << std::endl;
+	rwptm::write_virtual_memory<int>(0x5322ff7b0, 420);
+	std::cout << rwptm::read_virtual_memory<int>(0x5322ff7b0) << std::endl;
 
-	int new_val = 420;
-	memcpy((void*)corrected_va, &new_val, sizeof(new_val));
-
+	system("pause");
 	return 1;
 }
