@@ -123,6 +123,15 @@ namespace rwptm
 		return newAddress;
 	}
 
+	void init(const char* target_application, const char* local_application)
+	{
+		uintptr_t target_base = rwptm::attach(target_application);
+		rwptm::populate_cached_pml4();
+
+		uintptr_t attacker_base = rwptm::attach(local_application);
+		rwptm::setup_pml4_table();
+	}
+
 	template <typename T>
 	T read_virtual_memory(uintptr_t address)
 	{
