@@ -123,13 +123,19 @@ namespace rwptm
 		return newAddress;
 	}
 
+	// -------- USER FUNCS ---------
+	uintptr_t target_base = 0;
+
 	void init(const char* target_application, const char* local_application)
 	{
-		uintptr_t target_base = rwptm::attach(target_application);
+		target_base = rwptm::attach(target_application);
 		rwptm::populate_cached_pml4();
 
 		uintptr_t attacker_base = rwptm::attach(local_application);
 		rwptm::setup_pml4_table();
+
+		// unload driver we are done here
+		wnbios.unload_driver();
 	}
 
 	template <typename T>

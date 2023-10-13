@@ -1595,6 +1595,13 @@ public:
 	void write_virtual_memory(uintptr_t address, T val) {
 		write_virtual_memory(address, (LPVOID)&val, sizeof(T));
 	}
+
+	void unload_driver()
+	{
+		CloseHandle(hHandle);
+		stop_service();
+		delete_service();
+	}
 };
 
 namespace utils

@@ -2,11 +2,13 @@
 
 int main()
 {
-	rwptm::init("target.exe", "attacker.exe");
+	rwptm::init("cs2.exe", "attacker.exe");
 
-	std::cout << rwptm::read_virtual_memory<int>(0x56a3def800) << std::endl;
-	rwptm::write_virtual_memory<int>(0x56a3def800, 420);
-	std::cout << rwptm::read_virtual_memory<int>(0x56a3def800) << std::endl;
+	while (true)
+	{
+		std::cout << std::hex << rwptm::read_virtual_memory<short>(rwptm::target_base) << std::endl;
+		Sleep(500);
+	}
 
 	system("pause");
 	return 1;
