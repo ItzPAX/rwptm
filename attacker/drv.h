@@ -1481,6 +1481,13 @@ static byte wnbios64[] =
 };
 }
 
+namespace nt
+{
+	typedef NTSTATUS(*RtlAdjustPrivilege)(_In_ ULONG Privilege, _In_ BOOLEAN Enable, _In_ BOOLEAN Client, _Out_ PBOOLEAN WasEnabled);
+	typedef NTSTATUS(*NtLoadDriver)(PUNICODE_STRING DriverServiceName);
+	typedef NTSTATUS(*NtUnloadDriver)(PUNICODE_STRING DriverServiceName);
+}
+
 struct SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX
 {
 	PVOID Object;
@@ -1514,8 +1521,6 @@ struct wnbios_mem
 
 class wnbios_lib {
 private:
-	HANDLE hHandle = NULL;
-
 #define IOCTL_MAP 0x80102040
 #define IOCTL_UMAP 0x80102044
 
@@ -1526,15 +1531,17 @@ private:
 	uintptr_t EP_SECTIONBASE = 0;
 	uintptr_t EP_IMAGEFILENAME = 0;
 
-	std::string store_at = "C:\\Program Files\\WNUTD\\Driver\\";
+	std::string store_at = "C:\\Program Files\\WNUTD\\Driver";
 	std::string drv_name = "wnBios64.sys";
 	std::string service_name = "wnBios64";
 
 	bool to_file();
-	bool create_service();
-	bool start_service();
-	bool stop_service();
-	bool delete_service();
+	bool register_and_start();
+	bool stop_and_delete();
+
+	HANDLE hHandle = NULL;
+	SC_HANDLE hSCManager = NULL;
+	SC_HANDLE hSC = NULL;
 
 public:
 	uintptr_t cr3 = 0;
@@ -1543,8 +1550,7 @@ public:
 	wnbios_lib()
 	{
 		to_file();
-		create_service();
-		start_service();
+		register_and_start();
 
 		hHandle = CreateFile("\\\\.\\WNBIOS", GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
@@ -1553,8 +1559,7 @@ public:
 	}
 	~wnbios_lib() {
 		CloseHandle(hHandle);
-		stop_service();
-		delete_service();
+		stop_and_delete();
 	}
 
 	void get_eprocess_offsets();
@@ -1599,8 +1604,7 @@ public:
 	void unload_driver()
 	{
 		CloseHandle(hHandle);
-		stop_service();
-		delete_service();
+		stop_and_delete();
 	}
 };
 

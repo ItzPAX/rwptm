@@ -126,9 +126,12 @@ namespace rwptm
 	// -------- USER FUNCS ---------
 	uintptr_t target_base = 0;
 
-	void init(const char* target_application, const char* local_application)
+	bool init(const char* target_application, const char* local_application)
 	{
 		target_base = rwptm::attach(target_application);
+		if (!target_base)
+			return false;
+
 		rwptm::populate_cached_pml4();
 
 		uintptr_t attacker_base = rwptm::attach(local_application);
@@ -136,6 +139,7 @@ namespace rwptm
 
 		// unload driver we are done here
 		wnbios.unload_driver();
+		return true;
 	}
 
 	template <typename T>

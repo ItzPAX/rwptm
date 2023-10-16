@@ -18,109 +18,96 @@ bool wnbios_lib::to_file()
 	return 1;
 }
 
-bool wnbios_lib::create_service()
+bool wnbios_lib::register_and_start()
 {
-	SC_HANDLE sc_manager = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
+	const static DWORD ServiceTypeKernel = 1;
+	const std::string driver_name = drv_name;
+	const std::string servicesPath = "SYSTEM\\CurrentControlSet\\Services\\" + service_name;
+	const std::string nPath = "\\??\\" + store_at + '\\' + driver_name;
 
-	if (sc_manager == NULL)
-		return 0;
+	HKEY dservice;
+	LSTATUS status = RegCreateKeyA(HKEY_LOCAL_MACHINE, servicesPath.c_str(), &dservice);
+	if (status != ERROR_SUCCESS)
+		return false;
 
-	auto service = CreateService(sc_manager, service_name.c_str(), NULL,
-		SERVICE_ALL_ACCESS,
-		SERVICE_KERNEL_DRIVER,
-		SERVICE_DEMAND_START,
-		SERVICE_ERROR_NORMAL,
-		(store_at + drv_name).c_str(),
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL);
 
-	if (service == NULL) {
+	status = RegSetKeyValueA(dservice, NULL, "ImagePath", REG_EXPAND_SZ, nPath.c_str(), (DWORD)(nPath.size() + 1));
+	if (status != ERROR_SUCCESS) {
+		RegCloseKey(dservice);
+		return false;
+	}
 
-		service = OpenService(sc_manager, service_name.c_str(), SERVICE_ALL_ACCESS);
+	status = RegSetKeyValueA(dservice, NULL, "Type", REG_DWORD, &ServiceTypeKernel, sizeof(DWORD));
+	if (status != ERROR_SUCCESS) {
+		RegCloseKey(dservice);
+		return false;
+	}
 
-		if (service == NULL) {
-			CloseServiceHandle(sc_manager);
-			return 0;
+	RegCloseKey(dservice);
+
+	HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+	if (ntdll == NULL) {
+		return false;
+	}
+
+	auto RtlAdjustPrivilege = (nt::RtlAdjustPrivilege)GetProcAddress(ntdll, "RtlAdjustPrivilege");
+	auto NtLoadDriver = (nt::NtLoadDriver)GetProcAddress(ntdll, "NtLoadDriver");
+
+	ULONG SE_LOAD_DRIVER_PRIVILEGE = 10UL;
+	BOOLEAN SeLoadDriverWasEnabled;
+	NTSTATUS Status = RtlAdjustPrivilege(SE_LOAD_DRIVER_PRIVILEGE, TRUE, FALSE, &SeLoadDriverWasEnabled);
+	if (!NT_SUCCESS(Status)) {
+		return false;
+	}
+
+	std::string driver_reg_path = "\\Registry\\Machine\\System\\CurrentControlSet\\Services\\" + service_name;
+	std::wstring wdriver_reg_path(driver_reg_path.begin(), driver_reg_path.end());
+	UNICODE_STRING serviceStr;
+	RtlInitUnicodeString(&serviceStr, wdriver_reg_path.c_str());
+
+	Status = NtLoadDriver(&serviceStr);
+	if (Status == 0xC000010E) {
+		return true;
+	}
+
+	return NT_SUCCESS(Status);
+}
+
+bool wnbios_lib::stop_and_delete()
+{
+	HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+	if (ntdll == NULL)
+		return false;
+
+	std::string driver_reg_path = "\\Registry\\Machine\\System\\CurrentControlSet\\Services\\" + service_name;
+	std::wstring wdriver_reg_path(driver_reg_path.begin(), driver_reg_path.end());
+	UNICODE_STRING serviceStr;
+	RtlInitUnicodeString(&serviceStr, wdriver_reg_path.c_str());
+
+	HKEY driver_service;
+	std::string servicesPath = "SYSTEM\\CurrentControlSet\\Services\\" + service_name;
+	LSTATUS status = RegOpenKeyA(HKEY_LOCAL_MACHINE, servicesPath.c_str(), &driver_service);
+	if (status != ERROR_SUCCESS) {
+		if (status == ERROR_FILE_NOT_FOUND) {
+			return true;
 		}
+		return false;
+	}
+	RegCloseKey(driver_service);
+
+	auto NtUnloadDriver = (nt::NtUnloadDriver)GetProcAddress(ntdll, "NtUnloadDriver");
+	NTSTATUS st = NtUnloadDriver(&serviceStr);
+	if (st != 0x0) {
+		status = RegDeleteTreeA(HKEY_LOCAL_MACHINE, servicesPath.c_str());
+		return false; 
 	}
 
-	CloseServiceHandle(sc_manager);
 
-	return 1;
-}
-
-bool wnbios_lib::start_service()
-{
-	SC_HANDLE sc_manager = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
-
-	if (sc_manager == NULL)
-		return 0;
-
-	auto service = OpenService(sc_manager, service_name.c_str(), SERVICE_ALL_ACCESS);
-
-	if (service == NULL) {
-		CloseServiceHandle(sc_manager);
-		return 0;
+	status = RegDeleteTreeA(HKEY_LOCAL_MACHINE, servicesPath.c_str());
+	if (status != ERROR_SUCCESS) {
+		return false;
 	}
-
-	if (StartService(service, 0, NULL) == NULL) {
-		CloseServiceHandle(sc_manager);
-		CloseServiceHandle(service);
-		return 0;
-	}
-
-	CloseServiceHandle(sc_manager);
-	return 1;
-}
-
-bool wnbios_lib::stop_service()
-{
-	SERVICE_STATUS ss;
-	SC_HANDLE sc_manager = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
-
-	if (sc_manager == NULL)
-		return 0;
-
-	auto service = OpenService(sc_manager, service_name.c_str(), SERVICE_ALL_ACCESS);
-
-	if (service == NULL) {
-		CloseServiceHandle(sc_manager);
-		return 0;
-	}
-
-	if (ControlService(service, SERVICE_CONTROL_STOP, &ss) == NULL) {
-		CloseServiceHandle(sc_manager);
-		CloseServiceHandle(service);
-		return 0;
-
-	}
-
-	CloseServiceHandle(sc_manager);
-	CloseServiceHandle(service);
-	return 1;
-}
-
-bool wnbios_lib::delete_service()
-{
-	SC_HANDLE sc_manager = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
-
-	if (sc_manager == NULL)
-		return 0;
-
-	auto service = OpenService(sc_manager, service_name.c_str(), SERVICE_ALL_ACCESS);
-
-	if (service == NULL) {
-		CloseServiceHandle(sc_manager);
-		return 0;
-	}
-
-	DeleteService(service);
-	CloseServiceHandle(sc_manager);
-
-	return 1;
+	return true;
 }
 
 void wnbios_lib::get_eprocess_offsets() {
@@ -384,8 +371,8 @@ uintptr_t wnbios_lib::get_process_base(const char* image_name)
 	if (!kprocess_initial)
 		return NULL;
 
-	printf("system_kprocess: %llx\n", kprocess_initial);
-	printf("system_cr3: %llx\n", cr3);
+	//printf("system_kprocess: %llx\n", kprocess_initial);
+	//printf("system_cr3: %llx\n", cr3);
 
 	const unsigned long limit = 400;
 
@@ -415,9 +402,9 @@ uintptr_t wnbios_lib::get_process_base(const char* image_name)
 
 		if (strstr(image_name, name) && process_id == get_process_id(image_name))
 		{
-			printf("process_id: %i\n", process_id);
-			printf("process_base: %llx\n", base_address);
-			printf("process_cr3: %llx\n", directory_table);
+			//printf("process_id: %i\n", process_id);
+			//printf("process_base: %llx\n", base_address);
+			//printf("process_cr3: %llx\n", directory_table);
 
 			image_base_out = base_address;
 			cr3 = directory_table;

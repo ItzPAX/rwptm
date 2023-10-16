@@ -44,3 +44,6 @@
 *.tlog
 .vs/rwptm/v17/.suo
 *.pdb
+*.ilk
+*.enc
+*.idb
